@@ -6,41 +6,38 @@ import scala.collection.mutable
 object Matcher {
 
   def processBids(bids: List[Bid]): Unit = {
-    val toBuy = mutable.Map.empty[Offer, Queue[Bid]].withDefaultValue(Queue.empty[Bid])
-    val toSell = mutable.Map.empty[Offer, Queue[Bid]].withDefaultValue(Queue.empty[Bid])
+    //val toBuy = mutable.Map.empty[Offer, Queue[Bid]].withDefaultValue(Queue.empty[Bid])
+    //val toSell = mutable.Map.empty[Offer, Queue[Bid]].withDefaultValue(Queue.empty[Bid])
 
-    for (bid <- bids) {
-      bid match {
-        case s: Sell => handleSell(s)
-        case b: Buy => handleBuy(b)
-      }
-    }
-
-    def handleSell(s: Sell) = {
-      val offer = s.offer
-      val buyBid = toBuy(offer).find(_.name != s.name)
-      if (buyBid.isEmpty)
-        toSell(offer) = toSell(offer).enqueue(s)
+    def iterate(bids: List[Bid], toBuy: Map[Offer, Queue[Bid]], toSell: Map[Offer, Queue[Bid]]): Unit ={
+      if (bids.isEmpty) return
       else {
-        val bb = buyBid.get
-        if (ClientStorage.applyOffer(s.name, bb.name, offer))
-          toBuy(offer) = toBuy(offer) diff Queue(bb)
+        bids.head match {
+          case s: Sell =>
+            val offer = s.offer
+            val buyBid = toBuy(offer).find(_.name != s.name)
+            if (buyBid.isEmpty)
+              iterate(bids.tail, toBuy, toSell.updated(offer, toSell(offer).enqueue(s)) )
+            else {
+              ClientStorage.applyOffer(s.name, buyBid.get.name, offer)
+              iterate(bids.tail, toBuy.updated(offer, toBuy(offer) diff Queue(buyBid.get)), toSell)
+            }
+          case b: Buy =>
+            val offer = b.offer
+            val sellBid = toSell(offer).find(_.name != b.name)
+            if (sellBid.isEmpty)
+              iterate(bids.tail, toBuy.updated(offer, toBuy(offer).enqueue(b)), toSell )
+            else {
+              ClientStorage.applyOffer(sellBid.get.name, b.name, offer)
+              iterate(bids.tail, toBuy, toSell.updated(offer, toSell(offer) diff Queue(sellBid.get)))
+            }
+        }
+
       }
     }
 
-    def handleBuy(b: Buy) = {
-      val offer = b.offer
-      val sellBid = toSell(offer).find(_.name != b.name)
-      if (sellBid.isEmpty)
-        toBuy(offer) = toBuy(offer).enqueue(b)
-      else {
-        val sb = sellBid.get
-        if (ClientStorage.applyOffer(sb.name, b.name, offer))
-          toSell(offer) = toSell(offer) diff Queue(sb)
-      }
-
-    }
-
+    val map = Map.empty[Offer, Queue[Bid]].withDefaultValue(Queue.empty[Bid])
+    iterate(bids, map, map)
   }
 
 }
